@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>打企鵝</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="game-shell">
+      <section class="topbar" aria-label="遊戲資訊">
+        <div>
+          <p class="eyebrow">Classic Penguin Batting</p>
+          <h1>打企鵝</h1>
+        </div>
+        <div class="stats" aria-live="polite">
+          <div>
+            <span>本次距離</span>
+            <strong id="distance">0 m</strong>
+          </div>
+          <div>
+            <span>最佳紀錄</span>
+            <strong id="best">0 m</strong>
+          </div>
+          <div>
+            <span>狀態</span>
+            <strong id="status">準備</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="play-area">
+        <canvas id="game" width="1100" height="620" aria-label="打企鵝遊戲畫面"></canvas>
+        <div class="hud">
+          <div class="angle-panel">
+            <span>角度</span>
+            <div class="meter">
+              <i id="angleFill"></i>
+            </div>
+            <strong id="angleLabel">35°</strong>
+          </div>
+          <button id="swingButton" type="button">揮棒 / Space</button>
+          <button id="resetButton" type="button" aria-label="重新開始">重來</button>
+        </div>
+      </section>
+
+      <section class="controls" aria-label="控制選項">
+        <label>
+          <span>擊球角度</span>
+          <input id="angle" type="range" min="8" max="72" value="35">
+        </label>
+        <label>
+          <span>揮棒力量</span>
+          <input id="power" type="range" min="70" max="130" value="100">
+        </label>
+      </section>
+    </main>
+
+    <script src="game.js"></script>
+  </body>
+</html>
