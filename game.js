@@ -374,21 +374,26 @@ function drawPuffs() {
 }
 
 function drawMessage() {
+  const compact = window.innerWidth <= 760;
+  const messageX = compact ? 12 : 24;
+  const messageY = compact ? 76 : 104;
+  const messageWidth = compact ? 260 : 376;
+  const messageHeight = compact ? 54 : 72;
   ctx.save();
   ctx.fillStyle = "rgba(255,255,255,0.82)";
   ctx.strokeStyle = "rgba(23,32,51,0.12)";
   ctx.lineWidth = 1;
-  roundRect(ctx, 24, 24, 376, 72, 8);
+  roundRect(ctx, messageX, messageY, messageWidth, messageHeight, 8);
   ctx.fill();
   ctx.stroke();
   ctx.fillStyle = "#172033";
-  ctx.font = "800 22px Segoe UI, Noto Sans TC, sans-serif";
-  ctx.fillText(state.message, 44, 64);
+  ctx.font = `${compact ? 14 : 22}px Segoe UI, Noto Sans TC, sans-serif`;
+  ctx.fillText(state.message, messageX + (compact ? 12 : 20), messageY + (compact ? 32 : 40));
 
-  if (state.mode === "falling") {
+  if (state.mode === "falling" && !compact) {
     ctx.fillStyle = "rgba(8,122,143,0.75)";
     ctx.font = "700 14px Segoe UI, Noto Sans TC, sans-serif";
-    ctx.fillText("越接近球棒甜蜜點，初速越高；角度太高或太低都會少飛一點。", 44, 85);
+    ctx.fillText("越接近球棒甜蜜點，初速越高；角度太高或太低都會少飛一點。", 44, messageY + 61);
   }
   ctx.restore();
 }
