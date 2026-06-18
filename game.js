@@ -34,6 +34,7 @@ function resetGame() {
     swingT: 0,
     distance: 0,
     contactQuality: 0,
+    bounceCount: 0,
     penguin: {
       x: spawn.x,
       y: spawn.y,
@@ -134,12 +135,14 @@ function update(dt) {
         p.vy = -Math.abs(p.vy) * 0.34;
         p.vx *= 0.72;
         p.spin *= 0.62;
+        state.bounceCount += 1;
         burst(p.x, groundY - 18, 0.5);
         state.message = "彈了一下，繼續滑！";
       } else {
         state.mode = "sliding";
         p.vy = 0;
         p.spin = 0;
+        p.slideRotation = p.rotation;
         state.message = "滑行中...";
         updateStats("滑行");
       }
@@ -149,7 +152,15 @@ function update(dt) {
   if (state.mode === "sliding") {
     p.x += p.vx * dt;
     p.vx = Math.max(0, p.vx - 95 * dt);
-    p.rotation = Math.sin(state.t * 16) * Math.min(0.22, p.vx / 500);
+    const headFirstRotation = Math.PI / 2;
+    const turn = Math.min(1, dt * 7);
+    const delta = Math.atan2(
+      Math.sin(headFirstRotation - p.slideRotation),
+      Math.cos(headFirstRotation - p.slideRotation),
+    );
+    p.slideRotation += delta * turn;
+    const snowWobble = Math.sin(state.t * 18) * Math.min(0.08, p.vx / 1800);
+    p.rotation = p.slideRotation + snowWobble;
     if (p.vx <= 1) {
       state.mode = "settled";
       state.message = "完成！按 Space 或重來再玩一局";
