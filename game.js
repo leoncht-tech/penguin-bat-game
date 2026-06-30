@@ -59,6 +59,16 @@ function saveBestRecord(distance) {
   localStorage.setItem("penguinBestRecord", JSON.stringify(bestRecord));
 }
 
+function persistLoadedBestRecord() {
+  if (bestRecord.distance <= 0) return;
+  localStorage.setItem("penguinBest", String(bestRecord.distance));
+  if (!localStorage.getItem("penguinBestRecord")) {
+    localStorage.setItem("penguinBestRecord", JSON.stringify(bestRecord));
+  }
+}
+
+persistLoadedBestRecord();
+
 const sound = {
   ctx: null,
   master: null,
