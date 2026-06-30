@@ -17,7 +17,8 @@ const groundY = 520;
 const batter = { x: 148, y: groundY - 48 };
 const spawn = { x: 248, y: 72 };
 
-let best = Number(localStorage.getItem("penguinBest") || 0);
+let bestRecord = loadBestRecord();
+let best = bestRecord.distance;
 let state;
 let lastTime = performance.now();
 
@@ -27,7 +28,209 @@ const clouds = [
   { x: 880, y: 66, s: 0.95 },
 ];
 
+function loadBestRecord() {
+  const legacyBest = Number(localStorage.getItem("penguinBest") || 0);
+
+  try {
+    const saved = JSON.parse(localStorage.getItem("penguinBestRecord") || "null");
+    if (saved && Number.isFinite(saved.distance)) {
+      return {
+        distance: Math.max(saved.distance, legacyBest),
+        achievedAt: saved.achievedAt || null,
+      };
+    }
+  } catch {
+    // Ignore malformed local records and keep the best numeric score.
+  }
+
+  return {
+    distance: legacyBest,
+    achievedAt: legacyBest > 0 ? "legacy" : null,
+  };
+}
+
+function saveBestRecord(distance) {
+  bestRecord = {
+    distance,
+    achievedAt: new Date().toISOString(),
+  };
+  best = distance;
+  localStorage.setItem("penguinBest", String(distance));
+  localStorage.setItem("penguinBestRecord", JSON.stringify(bestRecord));
+}
+
+const sound = {
+  ctx: null,
+  master: null,
+  flight: null,
+  slide: null,
+  enabled: false,
+};
+
+function ensureAudio() {
+  if (!sound.ctx) {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) return false;
+    sound.ctx = new AudioCtor();
+    sound.master = sound.ctx.createGain();
+    sound.master.gain.value = 0.58;
+    sound.master.connect(sound.ctx.destination);
+  }
+
+  if (sound.ctx.state === "suspended") {
+    sound.ctx.resume();
+  }
+
+  sound.enabled = true;
+  return true;
+}
+
+function makeNoiseBuffer(duration = 1) {
+  const length = Math.max(1, Math.floor(sound.ctx.sampleRate * duration));
+  const buffer = sound.ctx.createBuffer(1, length, sound.ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < length; i += 1) {
+    data[i] = Math.random() * 2 - 1;
+  }
+  return buffer;
+}
+
+function playImpactSound(strength = 1) {
+  if (!sound.enabled && !ensureAudio()) return;
+
+  const now = sound.ctx.currentTime;
+  const thump = sound.ctx.createOscillator();
+  const thumpGain = sound.ctx.createGain();
+  thump.type = "triangle";
+  thump.frequency.setValueAtTime(175, now);
+  thump.frequency.exponentialRampToValueAtTime(58, now + 0.11);
+  thumpGain.gain.setValueAtTime(0.001, now);
+  thumpGain.gain.exponentialRampToValueAtTime(1.08 * strength, now + 0.012);
+  thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+  thump.connect(thumpGain).connect(sound.master);
+  thump.start(now);
+  thump.stop(now + 0.2);
+
+  const crack = sound.ctx.createBufferSource();
+  const crackFilter = sound.ctx.createBiquadFilter();
+  const crackGain = sound.ctx.createGain();
+  crack.buffer = makeNoiseBuffer(0.12);
+  crackFilter.type = "bandpass";
+  crackFilter.frequency.value = 1300;
+  crackFilter.Q.value = 4.5;
+  crackGain.gain.setValueAtTime(0.72 * strength, now);
+  crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+  crack.connect(crackFilter).connect(crackGain).connect(sound.master);
+  crack.start(now);
+  crack.stop(now + 0.13);
+}
+
+function playMissSound() {
+  if (!sound.enabled && !ensureAudio()) return;
+
+  const now = sound.ctx.currentTime;
+  const source = sound.ctx.createBufferSource();
+  const filter = sound.ctx.createBiquadFilter();
+  const gain = sound.ctx.createGain();
+  source.buffer = makeNoiseBuffer(0.24);
+  filter.type = "highpass";
+  filter.frequency.setValueAtTime(1100, now);
+  filter.frequency.exponentialRampToValueAtTime(250, now + 0.22);
+  gain.gain.setValueAtTime(0.22, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+  source.connect(filter).connect(gain).connect(sound.master);
+  source.start(now);
+  source.stop(now + 0.25);
+}
+
+function playBounceSound(force = 1) {
+  if (!sound.enabled && !ensureAudio()) return;
+
+  const now = sound.ctx.currentTime;
+  const bounce = sound.ctx.createOscillator();
+  const gain = sound.ctx.createGain();
+  bounce.type = "sine";
+  bounce.frequency.setValueAtTime(100, now);
+  bounce.frequency.exponentialRampToValueAtTime(46, now + 0.1);
+  gain.gain.setValueAtTime(0.001, now);
+  gain.gain.exponentialRampToValueAtTime(0.58 * force, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.19);
+  bounce.connect(gain).connect(sound.master);
+  bounce.start(now);
+  bounce.stop(now + 0.2);
+}
+
+function startFlightSound() {
+  if (!sound.enabled && !ensureAudio()) return;
+  stopLoop("flight");
+
+  const source = sound.ctx.createBufferSource();
+  const filter = sound.ctx.createBiquadFilter();
+  const gain = sound.ctx.createGain();
+  source.buffer = makeNoiseBuffer(1.2);
+  source.loop = true;
+  filter.type = "bandpass";
+  filter.frequency.value = 760;
+  filter.Q.value = 0.7;
+  gain.gain.value = 0.001;
+  source.connect(filter).connect(gain).connect(sound.master);
+  source.start();
+  sound.flight = { source, filter, gain };
+}
+
+function startSlideSound() {
+  if (!sound.enabled && !ensureAudio()) return;
+  stopLoop("slide");
+
+  const source = sound.ctx.createBufferSource();
+  const filter = sound.ctx.createBiquadFilter();
+  const gain = sound.ctx.createGain();
+  source.buffer = makeNoiseBuffer(0.6);
+  source.loop = true;
+  filter.type = "lowpass";
+  filter.frequency.value = 860;
+  gain.gain.value = 0.001;
+  source.connect(filter).connect(gain).connect(sound.master);
+  source.start();
+  sound.slide = { source, filter, gain };
+}
+
+function stopLoop(name) {
+  const loop = sound[name];
+  if (!loop) return;
+  const now = sound.ctx.currentTime;
+  loop.gain.gain.cancelScheduledValues(now);
+  loop.gain.gain.setTargetAtTime(0.001, now, 0.04);
+  loop.source.stop(now + 0.18);
+  sound[name] = null;
+}
+
+function stopMovingSounds() {
+  if (!sound.ctx) return;
+  stopLoop("flight");
+  stopLoop("slide");
+}
+
+function updateMovingSounds() {
+  if (!sound.ctx || !sound.enabled || !state) return;
+  const now = sound.ctx.currentTime;
+  const speed = Math.abs(state.penguin.vx);
+
+  if (sound.flight) {
+    const flightVolume = state.mode === "flying" ? Math.min(0.34, 0.06 + speed / 2600) : 0.001;
+    sound.flight.gain.gain.setTargetAtTime(flightVolume, now, 0.08);
+    sound.flight.filter.frequency.setTargetAtTime(520 + Math.min(900, speed), now, 0.1);
+  }
+
+  if (sound.slide) {
+    const slideVolume = state.mode === "sliding" ? Math.min(0.32, 0.04 + speed / 2100) : 0.001;
+    sound.slide.gain.gain.setTargetAtTime(slideVolume, now, 0.08);
+    sound.slide.filter.frequency.setTargetAtTime(430 + Math.min(620, speed * 0.8), now, 0.12);
+  }
+}
+
 function resetGame() {
+  stopMovingSounds();
   state = {
     mode: "falling",
     t: 0,
@@ -58,6 +261,8 @@ function updateAngleUi() {
 }
 
 function swing() {
+  ensureAudio();
+
   if (state.mode === "falling") {
     const p = state.penguin;
     const dx = p.x - batter.x;
@@ -79,10 +284,13 @@ function swing() {
       state.contactQuality = timing;
       state.mode = "flying";
       state.message = timing > 0.72 ? "完美命中！" : timing > 0.42 ? "漂亮一擊！" : "擦到邊了，還能飛";
+      playImpactSound(1 + timing * 0.55);
+      startFlightSound();
       burst(p.x, p.y, timing);
       updateStats("飛行中");
     } else {
       state.message = "揮空了！企鵝落地前再試一次";
+      playMissSound();
       updateStats("揮空");
     }
   } else if (state.mode === "settled") {
@@ -116,6 +324,8 @@ function update(dt) {
     if (p.y > groundY - 28) {
       state.message = "企鵝落地了，按重來再挑戰";
       state.mode = "settled";
+      stopMovingSounds();
+      playBounceSound(0.85);
       updateStats("落地");
       burst(p.x, groundY - 18, 0.65);
     }
@@ -136,6 +346,7 @@ function update(dt) {
         p.vx *= 0.72;
         p.spin *= 0.62;
         state.bounceCount += 1;
+        playBounceSound(Math.min(1.15, 0.35 + Math.abs(p.vy) / 360));
         burst(p.x, groundY - 18, 0.5);
         state.message = "彈了一下，繼續滑！";
       } else {
@@ -143,6 +354,8 @@ function update(dt) {
         p.vy = 0;
         p.spin = 0;
         p.slideRotation = p.rotation;
+        stopLoop("flight");
+        startSlideSound();
         state.message = "滑行中...";
         updateStats("滑行");
       }
@@ -164,14 +377,14 @@ function update(dt) {
     if (p.vx <= 1) {
       state.mode = "settled";
       state.message = "完成！按 Space 或重來再玩一局";
+      stopLoop("slide");
       updateStats("完成");
     }
   }
 
   state.distance = state.mode === "falling" ? 0 : Math.max(0, (p.x - batter.x - 104) / 4.2);
   if (state.distance > best) {
-    best = state.distance;
-    localStorage.setItem("penguinBest", String(best));
+    saveBestRecord(state.distance);
   }
 
   for (const puff of state.snowPuffs) {
@@ -184,6 +397,7 @@ function update(dt) {
 
   distanceEl.textContent = `${state.distance.toFixed(1)} m`;
   bestEl.textContent = `${best.toFixed(1)} m`;
+  updateMovingSounds();
 }
 
 function updateStats(status) {
